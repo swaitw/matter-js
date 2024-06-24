@@ -9,15 +9,17 @@ var Resolver = {};
 module.exports = Resolver;
 
 var Vertices = require('../geometry/Vertices');
+var Common = require('../core/Common');
 var Bounds = require('../geometry/Bounds');
 
 (function() {
 
-    Resolver._restingThresh = 4;
-    Resolver._restingThreshTangent = 6;
+    Resolver._restingThresh = 2;
+    Resolver._restingThreshTangent = Math.sqrt(6);
     Resolver._positionDampen = 0.9;
     Resolver._positionWarming = 0.8;
     Resolver._frictionNormalMultiplier = 5;
+    Resolver._frictionMaxStatic = Number.MAX_VALUE;
 
     /**
      * Prepare pairs for position solving.
@@ -27,7 +29,7 @@ var Bounds = require('../geometry/Bounds');
     Resolver.preSolvePosition = function(pairs) {
         var i,
             pair,
-            activeCount,
+            contactCount,
             pairsLength = pairs.length;
 
         // find total contacts on each body
@@ -37,9 +39,9 @@ var Bounds = require('../geometry/Bounds');
             if (!pair.isActive)
                 continue;
             
-            activeCount = pair.activeContacts.length;
-            pair.collision.parentA.totalContacts += activeCount;
-            pair.collision.parentB.totalContacts += activeCount;
+            contactCount = pair.contactCount;
+            pair.collision.parentA.totalContacts += contactCount;
+            pair.collision.parentB.totalContacts += contactCount;
         }
     };
 
@@ -47,9 +49,10 @@ var Bounds = require('../geometry/Bounds');
      * Find a solution for pair positions.
      * @method solvePosition
      * @param {pair[]} pairs
-     * @param {number} timeScale
+     * @param {number} delta
+     * @param {number} [damping=1]
      */
-    Resolver.solvePosition = function(pairs, timeScale) {
+    Resolver.solvePosition = function(pairs, delta, damping) {
         var i,
             pair,
             collision,
@@ -58,7 +61,8 @@ var Bounds = require('../geometry/Bounds');
             normal,
             contactShare,
             positionImpulse,
-            positionDampen = Resolver._positionDampen,
+            positionDampen = Resolver._positionDampen * (damping || 1),
+            slopDampen = Common.clamp(delta / Common._baseDelta, 0, 1),
             pairsLength = pairs.length;
 
         // find impulses required to resolve penetration
@@ -75,8 +79,8 @@ var Bounds = require('../geometry/Bounds');
 
             // get current separation between body edges involved in collision
             pair.separation = 
-                normal.x * (bodyB.positionImpulse.x + collision.penetration.x - bodyA.positionImpulse.x)
-                + normal.y * (bodyB.positionImpulse.y + collision.penetration.y - bodyA.positionImpulse.y);
+                collision.depth + normal.x * (bodyB.positionImpulse.x - bodyA.positionImpulse.x)
+                + normal.y * (bodyB.positionImpulse.y - bodyA.positionImpulse.y);
         }
         
         for (i = 0; i < pairsLength; i++) {
@@ -89,7 +93,7 @@ var Bounds = require('../geometry/Bounds');
             bodyA = collision.parentA;
             bodyB = collision.parentB;
             normal = collision.normal;
-            positionImpulse = (pair.separation - pair.slop) * timeScale;
+            positionImpulse = pair.separation - pair.slop * slopDampen;
 
             if (bodyA.isStatic || bodyB.isStatic)
                 positionImpulse *= 2;
@@ -172,8 +176,8 @@ var Bounds = require('../geometry/Bounds');
             if (!pair.isActive || pair.isSensor)
                 continue;
             
-            var contacts = pair.activeContacts,
-                contactsLength = contacts.length,
+            var contacts = pair.contacts,
+                contactCount = pair.contactCount,
                 collision = pair.collision,
                 bodyA = collision.parentA,
                 bodyB = collision.parentB,
@@ -181,7 +185,7 @@ var Bounds = require('../geometry/Bounds');
                 tangent = collision.tangent;
     
             // resolve each contact
-            for (j = 0; j < contactsLength; j++) {
+            for (j = 0; j < contactCount; j++) {
                 var contact = contacts[j],
                     contactVertex = contact.vertex,
                     normalImpulse = contact.normalImpulse,
@@ -219,14 +223,16 @@ var Bounds = require('../geometry/Bounds');
      * Find a solution for pair velocities.
      * @method solveVelocity
      * @param {pair[]} pairs
-     * @param {number} timeScale
+     * @param {number} delta
      */
-    Resolver.solveVelocity = function(pairs, timeScale) {
-        var timeScaleSquared = timeScale * timeScale,
-            restingThresh = Resolver._restingThresh * timeScaleSquared,
-            frictionNormalMultiplier = Resolver._frictionNormalMultiplier,
-            restingThreshTangent = Resolver._restingThreshTangent * timeScaleSquared,
-            NumberMaxValue = Number.MAX_VALUE,
+    Resolver.solveVelocity = function(pairs, delta) {
+        var timeScale = delta / Common._baseDelta,
+            timeScaleSquared = timeScale * timeScale,
+            timeScaleCubed = timeScaleSquared * timeScale,
+            restingThresh = -Resolver._restingThresh * timeScale,
+            restingThreshTangent = Resolver._restingThreshTangent,
+            frictionNormalMultiplier = Resolver._frictionNormalMultiplier * timeScale,
+            frictionMaxStatic = Resolver._frictionMaxStatic,
             pairsLength = pairs.length,
             tangentImpulse,
             maxFriction,
@@ -242,28 +248,26 @@ var Bounds = require('../geometry/Bounds');
             var collision = pair.collision,
                 bodyA = collision.parentA,
                 bodyB = collision.parentB,
-                bodyAVelocity = bodyA.velocity,
-                bodyBVelocity = bodyB.velocity,
                 normalX = collision.normal.x,
                 normalY = collision.normal.y,
                 tangentX = collision.tangent.x,
                 tangentY = collision.tangent.y,
-                contacts = pair.activeContacts,
-                contactsLength = contacts.length,
-                contactShare = 1 / contactsLength,
-                inverseMassTotal = bodyA.inverseMass + bodyB.inverseMass,
-                friction = pair.friction * pair.frictionStatic * frictionNormalMultiplier * timeScaleSquared;
+                inverseMassTotal = pair.inverseMass,
+                friction = pair.friction * pair.frictionStatic * frictionNormalMultiplier,
+                contacts = pair.contacts,
+                contactCount = pair.contactCount,
+                contactShare = 1 / contactCount;
 
-            // update body velocities
-            bodyAVelocity.x = bodyA.position.x - bodyA.positionPrev.x;
-            bodyAVelocity.y = bodyA.position.y - bodyA.positionPrev.y;
-            bodyBVelocity.x = bodyB.position.x - bodyB.positionPrev.x;
-            bodyBVelocity.y = bodyB.position.y - bodyB.positionPrev.y;
-            bodyA.angularVelocity = bodyA.angle - bodyA.anglePrev;
-            bodyB.angularVelocity = bodyB.angle - bodyB.anglePrev;
+            // get body velocities
+            var bodyAVelocityX = bodyA.position.x - bodyA.positionPrev.x,
+                bodyAVelocityY = bodyA.position.y - bodyA.positionPrev.y,
+                bodyAAngularVelocity = bodyA.angle - bodyA.anglePrev,
+                bodyBVelocityX = bodyB.position.x - bodyB.positionPrev.x,
+                bodyBVelocityY = bodyB.position.y - bodyB.positionPrev.y,
+                bodyBAngularVelocity = bodyB.angle - bodyB.anglePrev;
 
             // resolve each contact
-            for (j = 0; j < contactsLength; j++) {
+            for (j = 0; j < contactCount; j++) {
                 var contact = contacts[j],
                     contactVertex = contact.vertex;
 
@@ -272,10 +276,10 @@ var Bounds = require('../geometry/Bounds');
                     offsetBX = contactVertex.x - bodyB.position.x,
                     offsetBY = contactVertex.y - bodyB.position.y;
  
-                var velocityPointAX = bodyAVelocity.x - offsetAY * bodyA.angularVelocity,
-                    velocityPointAY = bodyAVelocity.y + offsetAX * bodyA.angularVelocity,
-                    velocityPointBX = bodyBVelocity.x - offsetBY * bodyB.angularVelocity,
-                    velocityPointBY = bodyBVelocity.y + offsetBX * bodyB.angularVelocity;
+                var velocityPointAX = bodyAVelocityX - offsetAY * bodyAAngularVelocity,
+                    velocityPointAY = bodyAVelocityY + offsetAX * bodyAAngularVelocity,
+                    velocityPointBX = bodyBVelocityX - offsetBY * bodyBAngularVelocity,
+                    velocityPointBY = bodyBVelocityY + offsetBX * bodyBAngularVelocity;
 
                 var relativeVelocityX = velocityPointAX - velocityPointBX,
                     relativeVelocityY = velocityPointAY - velocityPointBY;
@@ -287,12 +291,12 @@ var Bounds = require('../geometry/Bounds');
                 var normalOverlap = pair.separation + normalVelocity;
                 var normalForce = Math.min(normalOverlap, 1);
                 normalForce = normalOverlap < 0 ? 0 : normalForce;
-                
+
                 var frictionLimit = normalForce * friction;
 
-                if (tangentVelocity > frictionLimit || -tangentVelocity > frictionLimit) {
-                    maxFriction = tangentVelocity > 0 ? tangentVelocity : -tangentVelocity;
-                    tangentImpulse = pair.friction * (tangentVelocity > 0 ? 1 : -1) * timeScaleSquared;
+                if (tangentVelocity < -frictionLimit || tangentVelocity > frictionLimit) {
+                    maxFriction = (tangentVelocity > 0 ? tangentVelocity : -tangentVelocity);
+                    tangentImpulse = pair.friction * (tangentVelocity > 0 ? 1 : -1) * timeScaleCubed;
                     
                     if (tangentImpulse < -maxFriction) {
                         tangentImpulse = -maxFriction;
@@ -301,7 +305,7 @@ var Bounds = require('../geometry/Bounds');
                     }
                 } else {
                     tangentImpulse = tangentVelocity;
-                    maxFriction = NumberMaxValue;
+                    maxFriction = frictionMaxStatic;
                 }
 
                 // account for mass, inertia and contact offset
@@ -314,7 +318,7 @@ var Bounds = require('../geometry/Bounds');
                 tangentImpulse *= share;
 
                 // handle high velocity and resting collisions separately
-                if (normalVelocity * normalVelocity > restingThresh && normalVelocity < 0) {
+                if (normalVelocity < restingThresh) {
                     // high normal velocity so clear cached contact normal impulse
                     contact.normalImpulse = 0;
                 } else {
@@ -322,12 +326,12 @@ var Bounds = require('../geometry/Bounds');
                     // impulse constraint tends to 0
                     var contactNormalImpulse = contact.normalImpulse;
                     contact.normalImpulse += normalImpulse;
-                    contact.normalImpulse = Math.min(contact.normalImpulse, 0);
+                    if (contact.normalImpulse > 0) contact.normalImpulse = 0;
                     normalImpulse = contact.normalImpulse - contactNormalImpulse;
                 }
 
                 // handle high velocity and resting collisions separately
-                if (tangentVelocity * tangentVelocity > restingThreshTangent) {
+                if (tangentVelocity < -restingThreshTangent || tangentVelocity > restingThreshTangent) {
                     // high tangent velocity so clear cached contact tangent impulse
                     contact.tangentImpulse = 0;
                 } else {

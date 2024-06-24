@@ -1,9 +1,10 @@
 var Example = Example || {};
 
-Example.stress3 = function() {
+Example.renderResize = function() {
     var Engine = Matter.Engine,
         Render = Matter.Render,
         Runner = Matter.Runner,
+        Composite = Matter.Composite,
         Composites = Matter.Composites,
         Common = Matter.Common,
         MouseConstraint = Matter.MouseConstraint,
@@ -12,12 +13,8 @@ Example.stress3 = function() {
         Bodies = Matter.Bodies;
 
     // create engine
-    var engine = Engine.create({
-        positionIterations: 10,
-        velocityIterations: 10
-    });
-
-    var world = engine.world;
+    var engine = Engine.create(),
+        world = engine.world;
 
     // create renderer
     var render = Render.create({
@@ -26,8 +23,8 @@ Example.stress3 = function() {
         options: {
             width: 800,
             height: 600,
-            showStats: true,
-            showPerformance: true
+            showAngleIndicator: true,
+            pixelRatio: 2
         }
     });
 
@@ -38,20 +35,26 @@ Example.stress3 = function() {
     Runner.run(runner, engine);
 
     // add bodies
-    var scale = 0.3;
-    
-    var stack = Composites.stack(40, 40, 38, 18, 0, 0, function(x, y) {
+    var stack = Composites.stack(20, 20, 10, 5, 0, 0, function(x, y) {
         var sides = Math.round(Common.random(1, 8));
+
+        // round the edges of some bodies
+        var chamfer = null;
+        if (sides > 2 && Common.random() > 0.7) {
+            chamfer = {
+                radius: 10
+            };
+        }
 
         switch (Math.round(Common.random(0, 1))) {
         case 0:
             if (Common.random() < 0.8) {
-                return Bodies.rectangle(x, y, Common.random(25, 50) * scale, Common.random(25, 50) * scale);
+                return Bodies.rectangle(x, y, Common.random(25, 50), Common.random(25, 50), { chamfer: chamfer });
             } else {
-                return Bodies.rectangle(x, y, Common.random(80, 120) * scale, Common.random(25, 30) * scale);
+                return Bodies.rectangle(x, y, Common.random(80, 120), Common.random(25, 30), { chamfer: chamfer });
             }
         case 1:
-            return Bodies.polygon(x, y, sides, Common.random(25, 50) * scale);
+            return Bodies.polygon(x, y, sides, Common.random(25, 50), { chamfer: chamfer });
         }
     });
 
@@ -82,11 +85,30 @@ Example.stress3 = function() {
     // keep the mouse in sync with rendering
     render.mouse = mouse;
 
-    // fit the render viewport to the scene
-    Render.lookAt(render, {
-        min: { x: 0, y: 0 },
-        max: { x: 800, y: 600 }
-    });
+    // set canvas position to screen top left
+    render.canvas.style.position = 'fixed';
+
+    // resize event handler
+    var handleWindowResize = function() {
+        // get the current window size
+        var width = window.innerWidth,
+            height = window.innerHeight;
+
+        // set the render size to equal window size
+        Render.setSize(render, width, height);
+
+        // update the render bounds to fit the scene
+        Render.lookAt(render, Composite.allBodies(engine.world), {
+            x: 50,
+            y: 50
+        });
+    };
+
+    // add window resize handler
+    window.addEventListener('resize', handleWindowResize);
+
+    // update canvas size to initial window size
+    handleWindowResize();
 
     // context for MatterTools.Demo
     return {
@@ -101,9 +123,9 @@ Example.stress3 = function() {
     };
 };
 
-Example.stress3.title = 'Stress 3';
-Example.stress3.for = '>=0.14.2';
+Example.renderResize.title = 'Render Resize';
+Example.renderResize.for = '>=0.20.0';
 
 if (typeof module !== 'undefined') {
-    module.exports = Example.stress3;
+    module.exports = Example.renderResize;
 }

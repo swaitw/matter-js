@@ -41,8 +41,26 @@ var demo = function(examples, isDev) {
     document.title = 'Matter.js Demo' + (isDev ? ' ・ Dev' : '');
 
     if (isDev) {
-        var buttonSource = demo.dom.buttonSource;
-        var buttonCompare = buttonSource.cloneNode(true);
+        // add delta control
+        Matter.Common.chainPathAfter(MatterTools, 'Gui.create', function() {
+            this.datGui.__folders["Engine"]
+                .add(demo, "delta", 0, 1000 / 55)
+                .onChange(function() {
+                    var runner = demo.example.instance.runner;
+                    runner.delta = demo.delta;
+                })
+                .step(0.001)
+                .listen();
+        });
+
+        Matter.after('Runner.create', function() {
+            demo.delta = this.delta;
+        });
+
+        // add compare button
+        var buttonSource = demo.dom.buttonSource,
+            buttonCompare = buttonSource.cloneNode(true);
+
         buttonCompare.textContent = '⎄';
         buttonCompare.title = 'Compare';
         buttonCompare.href = '?compare';
@@ -52,10 +70,30 @@ var demo = function(examples, isDev) {
             window.location = '?compare#' + demo.example.id;
             event.preventDefault();
         });
+
         buttonSource.parentNode.insertBefore(buttonCompare, buttonSource.nextSibling);
 
         Matter.before('Render.create', function(renderOptions) {
+            // custom render options in development demo
             renderOptions.options.showDebug = true;
+            renderOptions.options.pixelRatio = 'auto';
+            renderOptions.options.wireframeStrokeStyle = '#aaa';
+        });
+
+        // arrow key navigation of examples
+        document.addEventListener('keyup', function(event) {
+            var isBackKey = event.key === 'ArrowLeft' || event.key === 'ArrowUp',
+                isForwardKey = event.key === 'ArrowRight' || event.key === 'ArrowDown';
+
+            if (isBackKey || isForwardKey) {
+                var direction = isBackKey ? -1 : 1,
+                    currentExampleIndex = demo.examples.findIndex(function(example) { 
+                        return example.id === demo.example.id;
+                    }),
+                    nextExample = demo.examples[(demo.examples.length + currentExampleIndex + direction) % demo.examples.length];
+                
+                MatterTools.Demo.setExample(demo, nextExample);
+            }
         });
     }
 

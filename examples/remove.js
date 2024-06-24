@@ -13,8 +13,11 @@ Example.remove = function() {
         Events = Matter.Events;
 
     // create engine
-    var engine = Engine.create(),
-        world = engine.world;
+    var engine = Engine.create({
+        enableSleeping: true
+    });
+
+    var world = engine.world;
 
     // create renderer
     var render = Render.create({
@@ -24,6 +27,7 @@ Example.remove = function() {
             width: 800,
             height: 600,
             showAngleIndicator: true,
+            showSleeping: true
         }
     });
 
@@ -32,9 +36,6 @@ Example.remove = function() {
     // create runner
     var runner = Runner.create();
     Runner.run(runner, engine);
-
-    var stack = null,
-        updateCount = 0;
 
     var createStack = function() {
         return Composites.stack(20, 20, 10, 5, 0, 0, function(x, y) {
@@ -61,15 +62,27 @@ Example.remove = function() {
         });
     };
 
-    // add and remove stacks every few updates
-    Events.on(engine, 'afterUpdate', function() {
+    var stack = null,
+        bottomStack = createStack(),
+        lastTimestamp = 0;
+
+    // add and remove bodies and composites every few updates
+    Events.on(engine, 'afterUpdate', function(event) {
         // limit rate
-        if (stack && updateCount <= 50) {
-            updateCount += 1;
+        if (event.timestamp - lastTimestamp < 800) {
             return;
         }
 
-        updateCount = 0;
+        lastTimestamp = event.timestamp;
+
+        // remove an old body
+        Composite.remove(bottomStack, bottomStack.bodies[0]);
+
+        // add a new body
+        Composite.add(
+            bottomStack, 
+            Bodies.rectangle(Common.random(100, 500), 50, Common.random(25, 50), Common.random(25, 50))
+        );
 
         // remove last stack
         if (stack) {
@@ -83,10 +96,9 @@ Example.remove = function() {
         Composite.add(world, stack);
     });
 
-    // add another stack that will not be removed
-    Composite.add(world, createStack());
-
     Composite.add(world, [
+        bottomStack,
+
         // walls
         Bodies.rectangle(400, 0, 800, 50, { isStatic: true }),
         Bodies.rectangle(400, 600, 800, 50, { isStatic: true }),

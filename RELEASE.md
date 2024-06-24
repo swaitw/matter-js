@@ -1,3 +1,119 @@
+## ▲.● matter.js `0.20.0`
+
+Release notes for `0.20.0`. See the release [readme](https://github.com/liabru/matter-js/blob/0.20.0/README.md) for further information.
+
+### Highlights ✺
+
+- added support for high refresh rate displays with fixed timestep in `Matter.Runner`
+- added support for sub-stepping for higher quality simulations in `Matter.Runner`
+- changed to a fixed timestep by default in `Matter.Runner`
+- improved frame pacing and average performance up to ~6% (see [#1238](https://github.com/liabru/matter-js/pull/1238))
+- reduced average memory usage up to ~30% (see [#1238](https://github.com/liabru/matter-js/pull/1238))
+- reduced memory garbage collection
+- bug fixes and improvements see [changelog](https://github.com/liabru/matter-js/blob/0.20.0/CHANGELOG.md)
+
+### Changes ✲
+
+See the release [compare page](https://github.com/liabru/matter-js/compare/0.19.0...0.20.0) and the [changelog](https://github.com/liabru/matter-js/blob/0.20.0/CHANGELOG.md) for a detailed list of changes.
+
+### Migration ⌲
+
+`Matter.Runner` related changes [#1254](https://github.com/liabru/matter-js/pull/1254):
+
+- `Matter.Runner` now defaults to a fixed deterministic timestep and support for non-fixed timestep is removed
+- optionally set your performance budgets `runner.maxFrameTime` (see docs)
+- note that `Matter.Runner` can now call zero, one, or multiple engine updates and events per display frame (see docs)
+- if needed set up your polyfill for `window.requestAnimationFrame`
+- see `Matter.Runner` updated docs throughout
+
+Performance related changes [#1238](https://github.com/liabru/matter-js/pull/1238):
+
+- `Matter.Collision` use `collision.supportCount` instead of `collision.supports.length` for active support count
+- `Matter.Pair` use `pair.contacts` instead of `pair.activeContacts`
+- `Matter.Pair` use `pair.contactCount` instead of `pair.contacts.length` for active contact count
+- `Pair.id` format has changed
+
+### Comparison ⎄
+
+For more information see [comparison method](https://github.com/liabru/matter-js/pull/794).
+
+```ocaml
+Output sample comparison estimates of 44 examples against previous release matter-js@0.19.0:  
+
+Similarity     99.80%    Overlap    -1.92%   Filesize   +3.38%  81.58 KB  
+
+airFriction · · avalanche ● · ballPool ● · bridge ● · car ● · catapult ● · 
+chains ● · circleStack · · cloth ● · collisionFiltering ● · compositeManipulation ● · 
+compound · · compoundStack ● · concave ● · constraints ● · doublePendulum · · 
+events ● · friction · · gravity ● · gyro ● · manipulation ● ◆ 
+mixed ● · newtonsCradle · · pyramid ● · ragdoll ● · raycasting ● · 
+remove ● ◆ restitution · · rounded ● · sensors · · sleeping ● ◆ 
+slingshot ● · softBody ● · sprites ● · stack · · staticFriction ● · 
+stats ● · stress ● · stress2 ● · stress3 ● · stress4 ● · 
+timescale ● · views ● · wreckingBall ● ·   
+
+where for the sample  · no change detected  ● extrinsics changed  ◆ intrinsics changed
+```
+
+### Contributors ♥︎
+
+Many thanks to the [contributors](https://github.com/liabru/matter-js/compare/0.19.0...0.20.0) of this release, [past contributors](https://github.com/liabru/matter-js/graphs/contributors) as well those involved in the [community](https://github.com/liabru/matter-js/issues) for your input and support.
+
+---
+
+## ▲.● matter.js `0.19.0`
+
+Release notes for `0.19.0`. See the release [readme](https://github.com/liabru/matter-js/blob/0.19.0/README.md) for further information.
+
+### Highlights ✺
+
+- Changed `Body.setAngularVelocity` and `Body.setVelocity` to be timestep independent
+- Improved similarity of results between different timesteps based on `60hz` as a baseline
+- Added timestep independent `Body.setSpeed`, `Body.setAngularSpeed`, `Body.getSpeed`, `Body.getVelocity`, `Body.getAngularVelocity`
+- Added optional `updateVelocity` argument to `Body.setPosition`, `Body.setAngle`, `Body.translate`, `Body.rotate`
+- Added extended documentation for `Body.applyForce`
+- Moved time correction feature from `Engine.update` to be built-in to `Matter.Body`
+- Improved [documentation](https://brm.io/matter-js/docs/) pages
+
+### Changes ✲
+
+See the release [compare page](https://github.com/liabru/matter-js/compare/0.18.0...0.19.0) and the [changelog](https://github.com/liabru/matter-js/blob/0.19.0/CHANGELOG.md) for a more detailed list of changes.
+
+### Migration ⌲
+
+See [PR #777](https://github.com/liabru/matter-js/pull/777#issue-487893963) for related changes and notes useful for migration.
+
+### Comparison ⎄
+
+For more information see [comparison method](https://github.com/liabru/matter-js/pull/794).
+
+```ocaml
+Output comparison of 43 examples at 60hz against previous release matter-js@0.18.0
+
+Behaviour    100.00%   Similarity  100.00%   Overlap   +0.00%  
+Performance  -0.80%   Memory      +0.05%   Filesize  +1.67%  78.97 KB  
+
+airFriction · · avalanche · · ballPool · · bridge · · car · · catapult · · 
+chains · · circleStack · · cloth · · collisionFiltering · · compositeManipulation · · 
+compound · · compoundStack · · concave · · constraints · · doublePendulum · · 
+events · · friction · · gravity · · gyro · · manipulation · · 
+mixed · · newtonsCradle · · pyramid · · ragdoll · · raycasting · · 
+remove · · restitution · · rounded · · sensors · · sleeping · ◆
+slingshot · · softBody · · sprites · · stack · · staticFriction · · 
+stats · · stress · · stress2 · · stress3 · · timescale · · 
+views · · wreckingBall · ·   
+
+where  · no change  ● extrinsics changed  ◆ intrinsics changed
+    
+▶ code -n -d test/__compare__/examples-build.json test/__compare__/examples-dev.json
+```
+
+### Contributors ♥︎
+
+Many thanks to the [contributors](https://github.com/liabru/matter-js/compare/0.18.0...0.19.0) of this release, [past contributors](https://github.com/liabru/matter-js/graphs/contributors) as well those involved in the [community](https://github.com/liabru/matter-js/issues) for your input and support.
+
+---
+
 ## ▲.● matter.js `0.18.0`
 
 Release notes for `0.18.0`. See the release [readme](https://github.com/liabru/matter-js/blob/0.18.0/README.md) for further information.
